@@ -41,6 +41,7 @@ def main():
     parser.add_argument('--model_scale', default=14, help='The dimension of images in the StyleGAN model', type=int)
     parser.add_argument('--batch_size', default=1, help='Batch size for generator and perceptual model', type=int)
     parser.add_argument('--optimizer', default='adam', help='Optimization algorithm used for optimizing dlatents')
+    parser.add_argument('--output_very_step', default=False, help='Output the results every step')
 
     # Perceptual model params
     parser.add_argument('--image_size', default=256, help='Size of images for perceptual model', type=int)
@@ -200,6 +201,27 @@ def main():
               for i, name in enumerate(names):
                 video_frame = PIL.Image.fromarray(batch_frames[i], 'RGB').resize((args.video_size,args.video_size),PIL.Image.LANCZOS)
                 video_out[name].write(cv2.cvtColor(np.array(video_frame).astype('uint8'), cv2.COLOR_RGB2BGR))
+            if args.output_every_step:
+                generated_images = generator.generate_images()
+                generated_dlatents = generator.get_dlatents()
+                for img_array, dlatent, img_path, img_name in zip(generated_images, generated_dlatents, images_batch, names):
+                    mask_img = None
+                    if args.composite_mask and (args.load_mask or args.face_mask):
+                        _, im_name = os.path.split(img_path)
+                        mask_img = os.path.join(args.mask_dir, f'{im_name}')
+                    if args.composite_mask and mask_img is not None and os.path.isfile(mask_img):
+                        orig_img = PIL.Image.open(img_path).convert('RGB')
+                        width, height = orig_img.size
+                        imask = PIL.Image.open(mask_img).convert('L').resize((width, height))
+                        imask = imask.filter(ImageFilter.GaussianBlur(args.composite_blur))
+                        mask = np.array(imask)/255
+                        mask = np.expand_dims(mask,axis=-1)
+                        img_array = mask*np.array(img_array) + (1.0-mask)*np.array(orig_img)
+                        img_array = img_array.astype(np.uint8)
+                        #img_array = np.where(mask, np.array(img_array), orig_img)
+                    img = PIL.Image.fromarray(img_array, 'RGB')
+                    img.save(os.path.join(args.generated_images_dir, f'{img_name}.png'), 'PNG')
+                    np.save(os.path.join(args.dlatent_dir, f'{img_name}.npy'), dlatent)
             generator.stochastic_clip_dlatents()
             prev_loss = loss_dict["loss"]
         if not args.use_best_loss:
