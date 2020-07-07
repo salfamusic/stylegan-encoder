@@ -40,7 +40,7 @@ def main():
     parser.add_argument('--model_url', default='https://drive.google.com/uc?id=1nT_cf610q5mxD_jACvV43w4SYBxsPUBq', help='Fetch a StyleGAN model to train on from this URL') # karras2019stylegan-ffhq-1024x1024.pkl
     parser.add_argument('--model_scale', default=14, help='The dimension of images in the StyleGAN model', type=int)
     parser.add_argument('--batch_size', default=1, help='Batch size for generator and perceptual model', type=int)
-    parser.add_argument('--optimizer', default='Adam', help='Optimization algorithm used for optimizing dlatents')
+    parser.add_argument('--optimizer', default='adam', help='Optimization algorithm used for optimizing dlatents')
 
     # Perceptual model params
     parser.add_argument('--image_size', default=256, help='Size of images for perceptual model', type=int)
