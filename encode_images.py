@@ -41,7 +41,7 @@ def main():
     parser.add_argument('--model_scale', default=14, help='The dimension of images in the StyleGAN model', type=int)
     parser.add_argument('--batch_size', default=1, help='Batch size for generator and perceptual model', type=int)
     parser.add_argument('--optimizer', default='adam', help='Optimization algorithm used for optimizing dlatents')
-    parser.add_argument('--output_very_step', default=False, help='Output the results every step')
+    parser.add_argument('--output_every_step', default=False, help='Output the results every step')
 
     # Perceptual model params
     parser.add_argument('--image_size', default=256, help='Size of images for perceptual model', type=int)
