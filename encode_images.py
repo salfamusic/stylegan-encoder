@@ -40,17 +40,17 @@ def main():
     parser.add_argument('--model_url', default='https://drive.google.com/uc?id=1nT_cf610q5mxD_jACvV43w4SYBxsPUBq', help='Fetch a StyleGAN model to train on from this URL') # karras2019stylegan-ffhq-1024x1024.pkl
     parser.add_argument('--model_scale', default=14, help='The dimension of images in the StyleGAN model', type=int)
     parser.add_argument('--batch_size', default=1, help='Batch size for generator and perceptual model', type=int)
-    parser.add_argument('--optimizer', default='ggt', help='Optimization algorithm used for optimizing dlatents')
+    parser.add_argument('--optimizer', default='Adam', help='Optimization algorithm used for optimizing dlatents')
 
     # Perceptual model params
     parser.add_argument('--image_size', default=256, help='Size of images for perceptual model', type=int)
     parser.add_argument('--resnet_image_size', default=256, help='Size of images for the Resnet model', type=int)
-    parser.add_argument('--lr', default=0.25, help='Learning rate for perceptual model', type=float)
-    parser.add_argument('--decay_rate', default=0.9, help='Decay rate for learning rate', type=float)
+    parser.add_argument('--lr', default=0.02, help='Learning rate for perceptual model', type=float)
+    parser.add_argument('--decay_rate', default=0.99, help='Decay rate for learning rate', type=float)
     parser.add_argument('--iterations', default=100, help='Number of optimization steps for each batch', type=int)
     parser.add_argument('--decay_steps', default=4, help='Decay steps for learning rate decay (as a percent of iterations)', type=float)
     parser.add_argument('--early_stopping', default=True, help='Stop early once training stabilizes', type=str2bool, nargs='?', const=True)
-    parser.add_argument('--early_stopping_threshold', default=0.5, help='Stop after this threshold has been reached', type=float)
+    parser.add_argument('--early_stopping_threshold', default=0.005, help='Stop after this threshold has been reached', type=float)
     parser.add_argument('--early_stopping_patience', default=10, help='Number of iterations to wait below threshold', type=int)    
     parser.add_argument('--load_effnet', default='data/finetuned_effnet.h5', help='Model to load for EfficientNet approximation of dlatents')
     parser.add_argument('--load_resnet', default='data/finetuned_resnet.h5', help='Model to load for ResNet approximation of dlatents')
@@ -67,7 +67,7 @@ def main():
     parser.add_argument('--use_lpips_loss', default=100, help='Use LPIPS perceptual loss; 0 to disable, > 0 to scale.', type=float)
     parser.add_argument('--use_l1_penalty', default=0.5, help='Use L1 penalty on latents; 0 to disable, > 0 to scale.', type=float)
     parser.add_argument('--use_discriminator_loss', default=0.5, help='Use trained discriminator to evaluate realism.', type=float)
-    parser.add_argument('--use_adaptive_loss', default=False, help='Use the adaptive robust loss function from Google Research for pixel and VGG feature loss.', type=str2bool, nargs='?', const=True)
+    parser.add_argument('--use_adaptive_loss', default=True, help='Use the adaptive robust loss function from Google Research for pixel and VGG feature loss.', type=str2bool, nargs='?', const=True)
 
     # Generator params
     parser.add_argument('--randomize_noise', default=False, help='Add noise to dlatents during optimization', type=str2bool, nargs='?', const=True)
