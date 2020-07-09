@@ -57,6 +57,8 @@ class Generator:
 
         self.dlatent_variable = next(v for v in tf.global_variables() if 'learnable_dlatents' in v.name)
         self._assign_dlatent_ph = tf.placeholder(tf.float32, name="assign_dlatent_ph")
+        print(self.dlatent_variable)
+        print(self._assign_dlatent_ph)
         self._assign_dlantent = tf.assign(self.dlatent_variable, self._assign_dlatent_ph)
         self.set_dlatents(self.initial_dlatents)
 
@@ -114,9 +116,7 @@ class Generator:
             else:
                 self._assign_dlantent = tf.assign(self.dlatent_variable, dlatents)
                 return
-        print(self._assign_dlantent)
-        print(self._assign_dlatent_ph)
-        print(self.dlatents)
+        
         self.sess.run([self._assign_dlantent], {self._assign_dlatent_ph: dlatents})
 
     def stochastic_clip_dlatents(self):
