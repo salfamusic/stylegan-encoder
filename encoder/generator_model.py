@@ -30,7 +30,7 @@ class Generator:
         self.model_scale = model_scale
 
         if tiled_dlatent:
-            self.initial_dlatents = np.zeros((self.batch_size, self.model_scale, 512))
+            self.initial_dlatents = np.zeros((self.batch_size, 512))
             model.components.synthesis.run(np.zeros((self.batch_size, self.model_scale, 512)),
                 randomize_noise=randomize_noise, minibatch_size=self.batch_size,
                 custom_inputs=[partial(create_variable_for_generator, batch_size=batch_size, tiled_dlatent=True),
@@ -114,6 +114,9 @@ class Generator:
             else:
                 self._assign_dlantent = tf.assign(self.dlatent_variable, dlatents)
                 return
+        print(self._assign_dlantent)
+        print(self._assign_dlatent_ph)
+        print(self.dlatents)
         self.sess.run([self._assign_dlantent], {self._assign_dlatent_ph: dlatents})
 
     def stochastic_clip_dlatents(self):
