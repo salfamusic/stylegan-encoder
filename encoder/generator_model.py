@@ -59,7 +59,7 @@ class Generator:
         self._assign_dlatent_ph = tf.placeholder(tf.float32, name="assign_dlatent_ph")
 
         if tiled_dlatent:
-            self.dlatent_variable = tf.reshape(self.dlatent_variable, [self.batch_size, 512])
+            tf.reshape(self.dlatent_variable, [self.batch_size, 512])
 
         print(self.dlatent_variable)
         self._assign_dlantent = tf.assign(self.dlatent_variable, self._assign_dlatent_ph)
