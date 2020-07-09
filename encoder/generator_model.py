@@ -30,7 +30,7 @@ class Generator:
         self.model_scale = model_scale
 
         if tiled_dlatent:
-            self.initial_dlatents = np.zeros((self.batch_size, 512))
+            self.initial_dlatents = np.zeros((self.batch_size, self.model_scale,, 512))
             model.components.synthesis.run(np.zeros((self.batch_size, self.model_scale, 512)),
                 randomize_noise=randomize_noise, minibatch_size=self.batch_size,
                 custom_inputs=[partial(create_variable_for_generator, batch_size=batch_size, tiled_dlatent=True),
