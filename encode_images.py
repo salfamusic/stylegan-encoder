@@ -192,7 +192,7 @@ def main():
                 if best_dlatent is None or args.average_best_loss <= 0.00000001:
                     best_dlatent = generator.get_dlatents()
                 else:
-                    best_dlatent = 0.25 * best_dlatent + 0.75 * generator.get_dlatents()
+                    best_dlatent = args.average_best_loss * best_dlatent + (1 - args.average_best_loss) * generator.get_dlatents()
                 if args.use_best_loss:
                     generator.set_dlatents(best_dlatent)
                 best_loss = loss_dict["loss"]
