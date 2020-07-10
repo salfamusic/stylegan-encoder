@@ -135,8 +135,6 @@ class Generator:
         self.dlatent_avg = self.dlatent_avg_def
 
     def generate_images(self, dlatents=None):
-        yay = np.reshape(np.load('yay.npy'), [1,1,512]).astype(np.float32) # embedded image
-        yay = tf.constant(yay)
         if dlatents is not None:
-            self.set_dlatents(dlatents + yay)
+            self.set_dlatents(dlatents)
         return self.sess.run(self.generated_image_uint8)
