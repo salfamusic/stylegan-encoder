@@ -192,8 +192,8 @@ class PerceptualModel:
             self.loss += ID_loss(img1, img2)
         # + L1 penalty on dlatent weights
         if self.l1_penalty is not None:
-            #self.loss += self.l1_penalty * 512 * tf.math.reduce_mean(tf.math.abs(generator.dlatent_variable-generator.get_dlatent_avg()))
-            self.loss += self.l1_penalty * 512 * tf.reduce_sum(tf.sqrt(tf.reduce_sum((generator.get_dlatent_avg() - generator.dlatent_variable)**2, axis = 1) + 1e-8 ))
+            self.loss += self.l1_penalty * 512 * tf.math.reduce_mean(tf.math.abs(generator.dlatent_variable-generator.get_dlatent_avg()))
+            #self.loss += self.l1_penalty * 512 * tf.reduce_sum(tf.sqrt(tf.reduce_sum((generator.get_dlatent_avg() - generator.dlatent_variable)**2, axis = 1) + 1e-8 ))
         # discriminator loss (realism)
         if self.discriminator_loss is not None:
             self.loss += self.discriminator_loss * tf.math.reduce_mean(self.discriminator.get_output_for(tflib.convert_images_from_uint8(generated_image_tensor, nhwc_to_nchw=True), self.stub))
