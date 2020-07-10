@@ -118,8 +118,11 @@ def main():
 
     generator = Generator(Gs_network, args.batch_size, clipping_threshold=args.clipping_threshold, tiled_dlatent=args.tile_dlatents, model_scale=args.model_scale, randomize_noise=args.randomize_noise)
     if (args.dlatent_avg != ''):
-        with dnnlib.util.open_url(args.dlatent_avg, cache_dir=config.cache_dir) as f:
-            generator.set_dlatent_avg(np.loadtxt(f))
+        if "drive.google" in args.dlatent_avg:
+            with dnnlib.util.open_url(args.dlatent_avg, cache_dir=config.cache_dir) as f:
+                generator.set_dlatent_avg(np.loadtxt(f))
+        else:
+            generator.set_dlatent_avg(np.loadtxt(args.dlatent_avg))
 
     perc_model = None
     if (args.use_lpips_loss > 0.00000001):

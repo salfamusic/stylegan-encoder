@@ -46,6 +46,9 @@ def tf_custom_adaptive_rgb_loss(a,b):
 def tf_custom_l1_loss(img1,img2):
   return tf.math.reduce_mean(tf.math.abs(img2-img1), axis=None)
 
+def tf_custom_l1_loss_2(img1, img2):
+  return tf.reduce_sum(tf.sqrt(tf.reduce_sum((img2 - img1)**2, axis = 1) + 1e-8 ))
+
 def tf_custom_logcosh_loss(img1,img2):
   return tf.math.reduce_mean(tf.keras.losses.logcosh(img1,img2))
 
