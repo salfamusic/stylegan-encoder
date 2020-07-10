@@ -14,6 +14,10 @@ from keras.applications.vgg16 import VGG16, preprocess_input
 import keras.backend as K
 import traceback
 import dnnlib.tflib as tflib
+from dnnlib.tflib.autosummary import autosummary
+from training.networks_recon import R_Net
+from training.networks_id import Perceptual_Net
+from training.networks_parser import Parsing
 
 def load_images(images_list, image_size=256, sharpen=False):
     loaded_images = list()
@@ -185,13 +189,16 @@ class PerceptualModel:
         # + extra perceptual loss on image pixels
         if self.perc_model is not None and self.lpips_loss is not None:
             self.loss += self.lpips_loss * tf.math.reduce_mean(self.perc_model.get_output_for(img1, img2))
+            self.loss += ID_loss(img1, img2)
         # + L1 penalty on dlatent weights
         if self.l1_penalty is not None:
-            self.loss += self.l1_penalty * 512 * tf.math.reduce_mean(tf.math.abs(generator.dlatent_variable-generator.get_dlatent_avg()))
+            #self.loss += self.l1_penalty * 512 * tf.math.reduce_mean(tf.math.abs(generator.dlatent_variable-generator.get_dlatent_avg()))
+            self.loss += self.l1_penalty * 512 * tf.reduce_sum(tf.sqrt(tf.reduce_sum((generator.get_dlatent_avg() - generator.dlatent_variable)**2, axis = 1) + 1e-8 ))
         # discriminator loss (realism)
         if self.discriminator_loss is not None:
             self.loss += self.discriminator_loss * tf.math.reduce_mean(self.discriminator.get_output_for(tflib.convert_images_from_uint8(generated_image_tensor, nhwc_to_nchw=True), self.stub))
         # - discriminator_network.get_output_for(tflib.convert_images_from_uint8(ref_img, nhwc_to_nchw=True), stub)
+            
 
 
     def generate_face_mask(self, im):
@@ -307,3 +314,31 @@ class PerceptualModel:
             else:
                 _, loss, lr = self.sess.run(fetch_ops)
                 yield {"loss":loss,"lr":lr}
+
+# identity similarity loss between rendered image and fake image
+def ID_loss(render_image,fake_image):
+
+    render_image = (render_image+1)*127.5
+    render_image = tf.clip_by_value(render_image,0,255)
+    render_image = tf.transpose(render_image,perm=[0,2,3,1])
+    render_image = tf.image.resize_images(render_image,size=[160,160], method=tf.image.ResizeMethod.BILINEAR)
+    fake_image = (fake_image+1)*127.5
+    fake_image = tf.clip_by_value(fake_image,0,255)
+    fake_image = tf.transpose(fake_image,perm=[0,2,3,1])
+    fake_image = tf.image.resize_images(fake_image,size=[160,160], method=tf.image.ResizeMethod.BILINEAR)
+
+    render_image = tf.reshape(render_image,[-1,160,160,3])
+
+    # input to face recognition network should have a shape of [batchsize,160,160,3], color range from 0-255 in RGB order.
+    id_fake = Perceptual_Net(fake_image)
+    id_render = Perceptual_Net(render_image)
+
+    id_fake = tf.nn.l2_normalize(id_fake, dim = 1)
+    id_render = tf.nn.l2_normalize(id_render, dim = 1)
+    # cosine similarity
+    sim = tf.reduce_sum(id_fake*id_render,1)
+    loss = tf.reduce_mean(tf.maximum(0.3,1.0 - sim))   # need clip! IMPORTANT
+
+    loss = autosummary('Loss/id_loss', loss)
+
+    return loss
