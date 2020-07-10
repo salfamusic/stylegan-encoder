@@ -189,7 +189,9 @@ class PerceptualModel:
         # + extra perceptual loss on image pixels
         if self.perc_model is not None and self.lpips_loss is not None:
             self.loss += self.lpips_loss * tf.math.reduce_mean(self.perc_model.get_output_for(img1, img2))
-            self.loss += ID_loss(img1, img2)
+            self.loss += L1_loss(img1, img2)
+            self.loss += 3 * ID_loss(img1, img2)
+            self.loss += 20 * Skin_color_loss(img1, img2)
         # + L1 penalty on dlatent weights
         if self.l1_penalty is not None:
             self.loss += self.l1_penalty * 512 * tf.math.reduce_mean(tf.math.abs(generator.dlatent_variable-generator.get_dlatent_avg()))
@@ -315,6 +317,11 @@ class PerceptualModel:
                 _, loss, lr = self.sess.run(fetch_ops)
                 yield {"loss":loss,"lr":lr}
 
+def L1_loss(render_img,fake_images):
+    l1_loss = tf.reduce_sum(tf.sqrt(tf.reduce_sum((render_img - fake_images)**2, axis = 1) + 1e-8 ))
+    l1_loss = autosummary('Loss/l1_loss', l1_loss)
+    return l1_loss
+
 # identity similarity loss between rendered image and fake image
 def ID_loss(render_image,fake_image):
 
@@ -340,5 +347,15 @@ def ID_loss(render_image,fake_image):
     loss = tf.reduce_mean(tf.maximum(0.3,1.0 - sim))   # need clip! IMPORTANT
 
     loss = autosummary('Loss/id_loss', loss)
+
+    return loss
+
+# average skin color loss between rendered image and fake image
+def Skin_color_loss(render, fake):
+    mean_fake = tf.reduce_sum(fake,[2,3])
+    mean_render = tf.reduce_sum(render,[2,3])
+
+    loss = tf.reduce_mean(tf.sqrt(tf.reduce_sum((mean_fake - mean_render)**2, axis = 1) + 1e-8 ))
+    loss = autosummary('Loss/skin_loss', loss)
 
     return loss
