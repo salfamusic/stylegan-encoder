@@ -191,7 +191,7 @@ class PerceptualModel:
             self.loss += self.lpips_loss * tf.math.reduce_mean(self.perc_model.get_output_for(img1, img2))
             #mask = tf.reshape(self.ref_weight, [1,256,3,256])
             self.loss += L1_loss(img1, img2, None)
-            self.loss += 3 * ID_loss(img1, img2, self.ref_weight)
+            self.loss += 3 * ID_loss(img1, img2, None)
             self.loss += 20 * Skin_color_loss(img1, img2, None)
         # + L1 penalty on dlatent weights
         if self.l1_penalty is not None:
