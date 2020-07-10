@@ -7,8 +7,6 @@
 
 """Network architectures used in the StyleGAN paper."""
 
-import math
-import config
 import numpy as np
 import tensorflow as tf
 import dnnlib
@@ -134,7 +132,7 @@ def downscale2d(x, factor=2):
 #----------------------------------------------------------------------------
 # Get/create weight tensor for a convolutional or fully-connected layer.
 
-def get_weight(shape, gain=np.sqrt(2), use_wscale=False, lrmul=1, suffix=''):
+def get_weight(shape, gain=np.sqrt(2), use_wscale=False, lrmul=1):
     fan_in = np.prod(shape[:-1]) # [kernel, kernel, fmaps_in, fmaps_out] or [in, out]
     he_std = gain / np.sqrt(fan_in) # He init
 
@@ -148,88 +146,18 @@ def get_weight(shape, gain=np.sqrt(2), use_wscale=False, lrmul=1, suffix=''):
 
     # Create variable.
     init = tf.initializers.random_normal(0, init_std)
-    return tf.get_variable('weight' + suffix, shape=shape, initializer=init) * runtime_coef
+    return tf.get_variable('weight', shape=shape, initializer=init) * runtime_coef
 
 #----------------------------------------------------------------------------
-# Fully-connected layer - replace with TreeConnect where appropriate
+# Fully-connected layer.
 
-if hasattr(config, 'use_treeconnect') and config.use_treeconnect:
+def dense(x, fmaps, **kwargs):
+    if len(x.shape) > 2:
+        x = tf.reshape(x, [-1, np.prod([d.value for d in x.shape[1:]])])
+    w = get_weight([x.shape[1].value, fmaps], **kwargs)
+    w = tf.cast(w, x.dtype)
+    return tf.matmul(x, w)
 
-    if (hasattr(config, 'treeconnect_threshold')):
-        treeconnect_threshold = config.treeconnect_threshold
-    else:
-        treeconnect_threshold = 1024
-
-    def is_square(n):
-        return (n == int(math.sqrt(n) + 0.5)**2)
-
-    def conv(inp,
-            k_h,
-            k_w,
-            c_o,
-            suffix = '',
-            **kwargs):
-        # Get the number of channels in the input
-        c_i = int(inp.get_shape()[1])
-        # Convolution for a given input and kernel
-        kernel = get_weight([k_h, k_w, c_i, c_o], suffix=suffix, **kwargs)
-        kernel = tf.cast(kernel, inp.dtype)
-        return tf.nn.conv2d(inp, kernel, strides=[1,1,1,1], padding='SAME', data_format='NCHW')
-
-    def real_dense(x, fmaps, **kwargs):
-        if len(x.shape) > 2:
-            x = tf.reshape(x, [-1, np.prod([d.value for d in x.shape[1:]])])
-        w = get_weight([x.shape[1].value, fmaps], **kwargs)
-        w = tf.cast(w, x.dtype)
-        return tf.matmul(x, w)
-
-    # replace dense layer with TreeConnect where possible - see https://github.com/OliverRichter/TreeConnect
-    def dense(x, fmaps, **kwargs):
-        if len(x.shape) > 2:
-            x = tf.reshape(x, [-1, np.prod([d.value for d in x.shape[1:]])])
-        layer_size = x.get_shape().as_list()
-        layer_size = layer_size[1]
-
-        if "tensorflow" in str(type(fmaps)):
-            fm = fmaps.value
-        else:
-            fm = int(fmaps)
-
-        if layer_size + fm <= treeconnect_threshold: # option to only replace the larger dense layers
-            return real_dense(x, fmaps, **kwargs)
-
-        if is_square(layer_size): # work out layer dimensions
-            layer_l = int(math.sqrt(layer_size)+0.5)
-            layer_r = layer_l
-        else:
-            layer_m = math.log(math.sqrt(layer_size),2)
-            layer_l = 2**math.ceil(layer_m)
-            layer_r = layer_size // layer_l
-
-        if fm >= layer_size: # adjust channels for output size
-            fm = fm//layer_size
-            rf = 1
-        else:
-            rf = layer_size//fm
-            fm = 1
-            if rf > layer_l: # fall back to dense layer
-                return real_dense(x, fmaps, **kwargs)
-
-        x = tf.reshape(x, [tf.shape(x)[0], 1, layer_l, layer_r])
-        w = conv(x, layer_r, 1, 1, **kwargs)
-        w = tf.transpose(w, perm=[0,1,3,2])
-        if rf > 1: # reshape to use channels
-            w = tf.reshape(w, [tf.shape(x)[0], rf, layer_l // rf, layer_r])
-        w = conv(w, layer_l, 1, fm, suffix='_1', **kwargs) # add suffix to weights
-        w = tf.reshape(w, [tf.shape(x)[0], np.prod([d.value for d in w.shape[1:]])])
-        return w
-else:
-    def dense(x, fmaps, **kwargs):
-        if len(x.shape) > 2:
-            x = tf.reshape(x, [-1, np.prod([d.value for d in x.shape[1:]])])
-        w = get_weight([x.shape[1].value, fmaps], **kwargs)
-        w = tf.cast(w, x.dtype)
-        return tf.matmul(x, w)
 #----------------------------------------------------------------------------
 # Convolutional layer.
 
@@ -328,6 +256,19 @@ def instance_norm(x, epsilon=1e-8):
         return x
 
 #----------------------------------------------------------------------------
+# Positional normalization
+def position_norm(x,epsilon=1e-8):
+    assert len(x.shape) == 4
+    with tf.variable_scope('PositionNorm'):
+        orig_dtype = x.dtype
+        x = tf.cast(x,tf.float32)
+        x -= tf.reduce_mean(x, axis=[1], keepdims=True)
+        epsilon = tf.constant(epsilon, dtype=x.dtype, name='epsilon')
+        x *= tf.rsqrt(tf.reduce_mean(tf.square(x), axis=[1], keepdims=True) + epsilon)
+        x = tf.cast(x, orig_dtype)
+        return x
+
+#----------------------------------------------------------------------------
 # Style modulation.
 
 def style_mod(x, dlatent, **kwargs):
@@ -396,8 +337,8 @@ def G_style(
         truncation_psi = None
     if is_training or (truncation_cutoff is not None and not tflib.is_tf_expression(truncation_cutoff) and truncation_cutoff <= 0):
         truncation_cutoff = None
-    if not is_training or (dlatent_avg_beta is not None and not tflib.is_tf_expression(dlatent_avg_beta) and dlatent_avg_beta == 1):
-        dlatent_avg_beta = None
+    # if not is_training or (dlatent_avg_beta is not None and not tflib.is_tf_expression(dlatent_avg_beta) and dlatent_avg_beta == 1):
+    #     dlatent_avg_beta = None
     if not is_training or (style_mixing_prob is not None and not tflib.is_tf_expression(style_mixing_prob) and style_mixing_prob <= 0):
         style_mixing_prob = None
 
@@ -415,39 +356,42 @@ def G_style(
 
     # Evaluate mapping network.
     dlatents = components.mapping.get_output_for(latents_in, labels_in, **kwargs)
-    dlorig = dlatents
-    dlatents = tf.cast(dlatents, dtype=np.float32)
+
     # Update moving average of W.
-    if dlatent_avg_beta is not None:
+    # if dlatent_avg_beta is not None:
+    if not is_validation:
         with tf.variable_scope('DlatentAvg'):
             batch_avg = tf.reduce_mean(dlatents[:, 0], axis=0)
             update_op = tf.assign(dlatent_avg, tflib.lerp(batch_avg, dlatent_avg, dlatent_avg_beta))
             with tf.control_dependencies([update_op]):
                 dlatents = tf.identity(dlatents)
 
+
+    #---------------------------------------------------------------
+    # Modified by Deng et al.
+
     # Perform style mixing regularization.
-    if style_mixing_prob is not None:
-        with tf.name_scope('StyleMix'):
-            latents2 = tf.random_normal(tf.shape(latents_in))
-            dlatents2 = components.mapping.get_output_for(latents2, labels_in, **kwargs)
-            dlatents2 = tf.cast(dlatents2, dlatents.dtype)
-            layer_idx = np.arange(num_layers)[np.newaxis, :, np.newaxis]
-            cur_layers = num_layers - tf.cast(lod_in, tf.int32) * 2
-            mixing_cutoff = tf.cond(
-                tf.random_uniform([], 0.0, 1.0) < style_mixing_prob,
-                lambda: tf.random_uniform([], 1, cur_layers, dtype=tf.int32),
-                lambda: cur_layers)
-            dlatents = tf.where(tf.broadcast_to(layer_idx < mixing_cutoff, tf.shape(dlatents)), dlatents, dlatents2)
+    # if style_mixing_prob is not None:
+    #     with tf.name_scope('StyleMix'):
+    #         latents2 = tf.random_normal(tf.shape(latents_in))
+    #         dlatents2 = components.mapping.get_output_for(latents2, labels_in, **kwargs)
+    #         layer_idx = np.arange(num_layers)[np.newaxis, :, np.newaxis]
+    #         cur_layers = num_layers - tf.cast(lod_in, tf.int32) * 2
+    #         mixing_cutoff = tf.cond(
+    #             tf.random_uniform([], 0.0, 1.0) < style_mixing_prob,
+    #             lambda: tf.random_uniform([], 1, cur_layers, dtype=tf.int32),
+    #             lambda: cur_layers)
+    #         dlatents = tf.where(tf.broadcast_to(layer_idx < mixing_cutoff, tf.shape(dlatents)), dlatents, dlatents2)
 
     # Apply truncation trick.
-    if truncation_psi is not None and truncation_cutoff is not None:
-        with tf.variable_scope('Truncation'):
-            layer_idx = np.arange(num_layers)[np.newaxis, :, np.newaxis]
-            ones = np.ones(layer_idx.shape, dtype=np.float32)
-            coefs = tf.where(layer_idx < truncation_cutoff, truncation_psi * ones, ones)
-            dlatents = tflib.lerp(dlatent_avg, dlatents, coefs)
+    # if truncation_psi is not None and truncation_cutoff is not None:
+    #     with tf.variable_scope('Truncation'):
+    #         layer_idx = np.arange(num_layers)[np.newaxis, :, np.newaxis]
+    #         ones = np.ones(layer_idx.shape, dtype=np.float32)
+    #         coefs = tf.where(layer_idx < truncation_cutoff, truncation_psi * ones, ones)
+    #         dlatents = tflib.lerp(dlatent_avg, dlatents, coefs)
 
-    dlatents = tf.cast(dlatents, dtype=dlorig.dtype)
+    #---------------------------------------------------------------
 
     # Evaluate synthesis network.
     with tf.control_dependencies([tf.assign(components.synthesis.find_var('lod'), lod_in)]):
@@ -460,7 +404,7 @@ def G_style(
 def G_mapping(
     latents_in,                             # First input: Latent vectors (Z) [minibatch, latent_size].
     labels_in,                              # Second input: Conditioning labels [minibatch, label_size].
-    latent_size             = 512,          # Latent vector (Z) dimensionality.
+    latent_size             = 254+32,          # Latent vector (Z) dimensionality.
     label_size              = 0,            # Label dimensionality, 0 if no labels.
     dlatent_size            = 512,          # Disentangled latent (W) dimensionality.
     dlatent_broadcast       = None,         # Output disentangled latent (W) as [minibatch, dlatent_size] or [minibatch, dlatent_broadcast, dlatent_size].
@@ -469,12 +413,9 @@ def G_mapping(
     mapping_lrmul           = 0.01,         # Learning rate multiplier for the mapping layers.
     mapping_nonlinearity    = 'lrelu',      # Activation function: 'relu', 'lrelu'.
     use_wscale              = True,         # Enable equalized learning rate?
-    normalize_latents       = True,         # Normalize latent vectors (Z) before feeding them to the mapping layers?
-    epsilon                 = 1e-8,         # Constant epsilon for pixelwise feature vector normalization.
+    normalize_latents       = False,         # Normalize latent vectors (Z) before feeding them to the mapping layers?
     dtype                   = 'float32',    # Data type to use for activations and outputs.
     **_kwargs):                             # Ignore unrecognized keyword args.
-
-    def PN(x): return pixel_norm(x, epsilon=epsilon) if normalize_latents else x
 
     act, gain = {'relu': (tf.nn.relu, np.sqrt(2)), 'lrelu': (leaky_relu, np.sqrt(2))}[mapping_nonlinearity]
 
@@ -492,8 +433,14 @@ def G_mapping(
             y = tf.matmul(labels_in, tf.cast(w, dtype))
             x = tf.concat([x, y], axis=1)
 
+    #---------------------------------------------------------------
+    # Modified by Deng et al.
+
     # Normalize latents.
-    x = PN(x)
+    # if normalize_latents:
+        # x = pixel_norm(x)
+
+    #---------------------------------------------------------------
 
     # Mapping layers.
     for layer_idx in range(mapping_layers):
@@ -530,7 +477,6 @@ def G_synthesis(
     nonlinearity        = 'lrelu',      # Activation function: 'relu', 'lrelu'
     use_wscale          = True,         # Enable equalized learning rate?
     use_pixel_norm      = False,        # Enable pixelwise feature vector normalization?
-    epsilon             = 1e-8,         # Constant epsilon for pixelwise feature vector normalization.
     use_instance_norm   = True,         # Enable instance normalization?
     dtype               = 'float32',    # Data type to use for activations and outputs.
     fused_scale         = 'auto',       # True = fused convolution + scaling, False = separate ops, 'auto' = decide automatically.
@@ -543,8 +489,6 @@ def G_synthesis(
     resolution_log2 = int(np.log2(resolution))
     assert resolution == 2**resolution_log2 and resolution >= 4
     def nf(stage): return min(int(fmap_base / (2.0 ** (stage * fmap_decay))), fmap_max)
-    def PN(x): return pixel_norm(x, epsilon=epsilon) if use_pixel_norm else x
-    def IN(x): return instance_norm(x, epsilon=epsilon) if use_instance_norm else x
     def blur(x): return blur2d(x, blur_filter) if blur_filter else x
     if is_template_graph: force_clean_graph = True
     if force_clean_graph: randomize_noise = False
@@ -573,8 +517,10 @@ def G_synthesis(
             x = apply_noise(x, noise_inputs[layer_idx], randomize_noise=randomize_noise)
         x = apply_bias(x)
         x = act(x)
-        x = PN(x)
-        x = IN(x)
+        if use_pixel_norm:
+            x = pixel_norm(x)
+        if use_instance_norm:
+            x = instance_norm(x)
         if use_styles:
             x = style_mod(x, dlatents_in[:, layer_idx], use_wscale=use_wscale)
         return x
@@ -737,4 +683,19 @@ def D_basic(
     scores_out = tf.identity(scores_out, name='scores_out')
     return scores_out
 
+#----------------------------------------------------------------------------
+# Modified by Deng et al.
+
+# Mapping z space variable to lambda space variable
+def CoeffDecoder(z,ch_depth = 3, ch_dim = 512, coeff_length = 128):
+    with tf.variable_scope('stage1'):
+        with tf.variable_scope('decoder'):
+            y = z
+            for i in range(ch_depth):
+                y = tf.layers.dense(y, ch_dim, tf.nn.relu, name='fc'+str(i))
+
+            x_hat = tf.layers.dense(y, coeff_length, name='x_hat')
+            x_hat = tf.stop_gradient(x_hat)
+
+    return x_hat
 #----------------------------------------------------------------------------

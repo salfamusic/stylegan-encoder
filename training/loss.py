@@ -128,13 +128,15 @@ def G_logistic_saturating(G, D, opt, training_set, minibatch_size): # pylint: di
     loss = -tf.nn.softplus(fake_scores_out)  # log(1 - logistic(fake_scores_out))
     return loss
 
-def G_logistic_nonsaturating(G, D, opt, training_set, minibatch_size): # pylint: disable=unused-argument
-    latents = tf.random_normal([minibatch_size] + G.input_shapes[0][1:])
+#---------------------------------------------------------------
+# Modified by Deng et al.
+def G_logistic_nonsaturating(G, D, latents, opt, training_set, minibatch_size, randomize_noise = True): # pylint: disable=unused-argument
     labels = training_set.get_random_labels_tf(minibatch_size)
-    fake_images_out = G.get_output_for(latents, labels, is_training=True)
+    fake_images_out = G.get_output_for(latents, labels, is_training=True, randomize_noise=randomize_noise)
     fake_scores_out = fp32(D.get_output_for(fake_images_out, labels, is_training=True))
     loss = tf.nn.softplus(-fake_scores_out)  # -log(logistic(fake_scores_out))
-    return loss
+    return loss,fake_images_out
+#---------------------------------------------------------------
 
 def D_logistic(G, D, opt, training_set, minibatch_size, reals, labels): # pylint: disable=unused-argument
     latents = tf.random_normal([minibatch_size] + G.input_shapes[0][1:])
@@ -147,15 +149,17 @@ def D_logistic(G, D, opt, training_set, minibatch_size, reals, labels): # pylint
     loss += tf.nn.softplus(-real_scores_out)  # -log(logistic(real_scores_out)) # temporary pylint workaround # pylint: disable=invalid-unary-operand-type
     return loss
 
-def D_logistic_simplegp(G, D, opt, training_set, minibatch_size, reals, labels, r1_gamma=10.0, r2_gamma=0.0): # pylint: disable=unused-argument
-    latents = tf.random_normal([minibatch_size] + G.input_shapes[0][1:])
-    fake_images_out = G.get_output_for(latents, labels, is_training=True)
+#---------------------------------------------------------------
+# Modified by Deng et al.
+def D_logistic_simplegp(G, D,latents, opt, training_set, minibatch_size, reals, labels, r1_gamma=10.0, r2_gamma=0.0,randomize_noise = True): # pylint: disable=unused-argument
+    fake_images_out = G.get_output_for(latents, labels, is_training=True,randomize_noise=randomize_noise)
     real_scores_out = fp32(D.get_output_for(reals, labels, is_training=True))
     fake_scores_out = fp32(D.get_output_for(fake_images_out, labels, is_training=True))
     real_scores_out = autosummary('Loss/scores/real', real_scores_out)
     fake_scores_out = autosummary('Loss/scores/fake', fake_scores_out)
     loss = tf.nn.softplus(fake_scores_out)  # -log(1 - logistic(fake_scores_out))
     loss += tf.nn.softplus(-real_scores_out)  # -log(logistic(real_scores_out)) # temporary pylint workaround # pylint: disable=invalid-unary-operand-type
+
 
     if r1_gamma != 0.0:
         with tf.name_scope('R1Penalty'):
@@ -173,5 +177,4 @@ def D_logistic_simplegp(G, D, opt, training_set, minibatch_size, reals, labels, 
             r2_penalty = autosummary('Loss/r2_penalty', r2_penalty)
         loss += r2_penalty * (r2_gamma * 0.5)
     return loss
-
-#----------------------------------------------------------------------------
+#---------------------------------------------------------------

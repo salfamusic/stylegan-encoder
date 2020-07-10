@@ -119,14 +119,6 @@ def list_network_pkls(run_id_or_run_dir, include_final=True):
         del pkls[0]
     return pkls
 
-def locate_latest_pkl():
-    allpickles = sorted(glob.glob(os.path.join(config.result_dir, '0*', 'network-*.pkl')))
-    latest_pickle = allpickles[-1]
-    resume_run_id = os.path.basename(os.path.dirname(latest_pickle))
-    RE_KIMG = re.compile('network-snapshot-(\d+).pkl')
-    kimg = int(RE_KIMG.match(os.path.basename(latest_pickle)).group(1))
-    return (locate_network_pkl(resume_run_id), float(kimg))
-
 def locate_network_pkl(run_id_or_run_dir_or_network_pkl, snapshot_or_network_pkl=None):
     for candidate in [snapshot_or_network_pkl, run_id_or_run_dir_or_network_pkl]:
         if isinstance(candidate, str):
@@ -218,7 +210,7 @@ def setup_snapshot_image_grid(G, training_set,
     # Initialize data arrays.
     reals = np.zeros([gw * gh] + training_set.shape, dtype=training_set.dtype)
     labels = np.zeros([gw * gh, training_set.label_size], dtype=training_set.label_dtype)
-    latents = np.random.randn(gw * gh, *G.input_shape[1:])
+    # latents = np.random.randn(gw * gh, *G.input_shape[1:])
 
     # Random layout.
     if layout == 'random':
@@ -248,6 +240,6 @@ def setup_snapshot_image_grid(G, training_set,
                     reals[x + y * gw] = real[0]
                     labels[x + y * gw] = label[0]
 
-    return (gw, gh), reals, labels, latents
+    return (gw, gh), reals, labels
 
 #----------------------------------------------------------------------------
