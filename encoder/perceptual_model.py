@@ -190,9 +190,9 @@ class PerceptualModel:
         if self.perc_model is not None and self.lpips_loss is not None:
             self.loss += self.lpips_loss * tf.math.reduce_mean(self.perc_model.get_output_for(img1, img2))
             #mask = tf.reshape(self.ref_weight, [1,256,3,256])
-            self.loss += L1_loss(img1, img2, self.ref_weight)
+            self.loss += L1_loss(img1, img2, None)
             self.loss += 3 * ID_loss(img1, img2, self.ref_weight)
-            self.loss += 20 * Skin_color_loss(img1, img2, self.ref_weight)
+            self.loss += 20 * Skin_color_loss(img1, img2, None)
         # + L1 penalty on dlatent weights
         if self.l1_penalty is not None:
             self.loss += self.l1_penalty * 512 * tf.math.reduce_mean(tf.math.abs(generator.dlatent_variable-generator.get_dlatent_avg()))
@@ -319,6 +319,8 @@ class PerceptualModel:
                 yield {"loss":loss,"lr":lr}
 
 def L1_loss(render_img,fake_images,render_mask):
+    if render_mask is None:
+      return tf.math.reduce_mean(tf.math.abs(fake_images-render_img))
     l1_loss = tf.reduce_sum(tf.sqrt(tf.reduce_sum((render_img - fake_images)**2, axis = 1) + 1e-8 )*render_mask)/tf.reduce_sum(render_mask)
     l1_loss = autosummary('Loss/l1_loss', l1_loss)
     return l1_loss
@@ -333,7 +335,8 @@ def ID_loss(render_image,fake_image,render_mask):
     fake_image = (fake_image+1)*127.5
     fake_image = tf.clip_by_value(fake_image,0,255)
     fake_image = tf.transpose(fake_image,perm=[0,2,3,1])
-    fake_image = fake_image*tf.expand_dims(render_mask,3)
+    if render_mask is not None:
+      fake_image = fake_image*tf.expand_dims(render_mask,3)
     fake_image = tf.image.resize_images(fake_image,size=[160,160], method=tf.image.ResizeMethod.BILINEAR)
 
     render_image = tf.reshape(render_image,[-1,160,160,3])
@@ -354,6 +357,11 @@ def ID_loss(render_image,fake_image,render_mask):
 
 # average skin color loss between rendered image and fake image
 def Skin_color_loss(render, fake, mask):
+    if mask is None:
+      mean_fake = tf.reduce_sum(fake,[2,3])
+      mean_render = tf.reduce_sum(render,[2,3])
+      return tf.math.reduce_mean(tf.math.abs(mean_fake-mean_render))
+
     mask = tf.expand_dims(mask,1)
     mean_fake = tf.reduce_sum(fake*mask,[2,3])/tf.reduce_sum(mask,[2,3])
     mean_render = tf.reduce_sum(render*mask,[2,3])/tf.reduce_sum(mask,[2,3])
