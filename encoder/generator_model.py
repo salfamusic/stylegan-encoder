@@ -116,8 +116,7 @@ class Generator:
             else:
                 self._assign_dlantent = tf.assign(self.dlatent_variable, dlatents)
                 return
-        print(self._assign_dlatent_ph)
-        print(self.dlatents)
+        dlatents = np.reshape(dlatents, [self.batch_size, 1, 512])
         self.sess.run([self._assign_dlantent], {self._assign_dlatent_ph: dlatents})
 
     def stochastic_clip_dlatents(self):
@@ -136,6 +135,8 @@ class Generator:
         self.dlatent_avg = self.dlatent_avg_def
 
     def generate_images(self, dlatents=None):
+        yay = np.reshape(np.load('yay.npy'), [1,1,512]).astype(np.float32) # embedded image
+        yay = tf.constant(yay)
         if dlatents is not None:
-            self.set_dlatents(dlatents)
+            self.set_dlatents(dlatents + yay)
         return self.sess.run(self.generated_image_uint8)
